@@ -18,7 +18,7 @@ module Middleman
         app.ready do
           # Doesn't make sense in build
           if environment != :build
-            reactor = Reactor.new(options, self)
+            @@reactor ||= Reactor.new(options, self)
 
             files.changed do |file|
               sleep options[:grace_period]
@@ -33,13 +33,13 @@ module Middleman
                 reload_path = "#{Dir.pwd}/#{file}"
               end
 
-              reactor.reload_browser(reload_path)
+              @@reactor.reload_browser(reload_path)
             end
 
             files.deleted do |file|
               sleep options[:grace_period]
               sitemap.ensure_resource_list_updated!
-              reactor.reload_browser("#{Dir.pwd}/#{file}")
+              @@reactor.reload_browser("#{Dir.pwd}/#{file}")
             end
 
             use ::Rack::LiveReload, :port => options[:port].to_i, :host => options[:host]
