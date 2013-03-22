@@ -23,7 +23,7 @@ module Middleman
             files.changed do |file|
               sleep options[:grace_period]
               sitemap.ensure_resource_list_updated!
-              
+
               begin
                 file_url = sitemap.file_to_path(file)
                 file_resource = sitemap.find_resource_by_path(file_url)
@@ -31,10 +31,10 @@ module Middleman
               rescue
                 reload_path = "#{Dir.pwd}/#{file}"
               end
-              
+
               reactor.reload_browser(reload_path)
             end
-            
+
             files.deleted do |file|
               sleep options[:grace_period]
               sitemap.ensure_resource_list_updated!
@@ -51,7 +51,7 @@ module Middleman
     class Reactor
       attr_reader :thread, :web_sockets, :app
       delegate :logger, :to => :app
-      
+
       def initialize(options, app)
         @app = app
         @web_sockets = []
@@ -72,7 +72,7 @@ module Middleman
             :apply_js_live  => @options[:apply_js_live],
             :apply_css_live => @options[:apply_css_live]
           }])
-          
+
           @web_sockets.each { |ws| ws.send(data) }
         end
       end
