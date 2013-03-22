@@ -28,7 +28,8 @@ module Middleman
                 file_url = sitemap.file_to_path(file)
                 file_resource = sitemap.find_resource_by_path(file_url)
                 reload_path = file_resource.destination_path
-              rescue
+              rescue StandardError => e
+                app.logger.error "== #{e.message}"
                 reload_path = "#{Dir.pwd}/#{file}"
               end
 
@@ -64,16 +65,20 @@ module Middleman
       end
 
       def reload_browser(paths = [])
-        paths = Array(paths)
-        logger.info "== LiveReloading path: #{paths.join(' ')}"
-        paths.each do |path|
-          data = MultiJson.encode(['refresh', {
-            :path           => path,
-            :apply_js_live  => @options[:apply_js_live],
-            :apply_css_live => @options[:apply_css_live]
-          }])
+        if @web_sockets.count > 0
+          paths = Array(paths)
+          logger.info "== LiveReloading path: #{paths.join(' ')}"
+          paths.each do |path|
+            data = MultiJson.encode(['refresh', {
+              :path           => path,
+              :apply_js_live  => @options[:apply_js_live],
+              :apply_css_live => @options[:apply_css_live]
+            }])
 
-          @web_sockets.each { |ws| ws.send(data) }
+            @web_sockets.each { |ws| ws.send(data) }
+          end
+        else
+          logger.debug "@web_sockets is empty, nothing to do"
         end
       end
 
@@ -94,7 +99,11 @@ module Middleman
               end
 
               ws.onmessage do |msg|
-                logger.debug "LiveReload Browser URL: #{msg}"
+                logger.debug "== LiveReload browser response: #{msg}"
+              end
+
+              ws.onerror do |e|
+                logger.debug "== LiveReload Error: #{e.message}"
               end
 
               ws.onclose do
