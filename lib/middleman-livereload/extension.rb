@@ -78,7 +78,7 @@ module Middleman
             @web_sockets.each { |ws| ws.send(data) }
           end
         else
-          logger.debug "@web_sockets is empty, nothing to do"
+          logger.debug "== LiveReload @web_sockets is empty, nothing to do"
         end
       end
 
@@ -86,12 +86,20 @@ module Middleman
         Thread.new do
           EventMachine.run do
             logger.info "== LiveReload is waiting for a browser to connect"
-            EventMachine.start_server(options[:host], options[:port], EventMachine::WebSocket::Connection, {}) do |ws|
-              ws.onopen do
+
+            EventMachine::WebSocket.run(:host => options[:host],
+                                        :port => options[:port],
+                                        :debug => false) do |ws|
+
+              ws.onopen do |handshake|
                 begin
                   ws.send "!!ver:#{options[:api_version]}"
                   @web_sockets << ws
-                  logger.debug "== LiveReload browser connected"
+                  logger.debug "== LiveReload browser connected #{{
+                    :path => handshake.path,
+                    :query => handshake.query,
+                    :origin => handshake.origin,
+                  }}"
                 rescue
                   $stderr.puts $!
                   $stderr.puts $!.backtrace
