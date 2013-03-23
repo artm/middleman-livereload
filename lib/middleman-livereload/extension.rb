@@ -18,7 +18,11 @@ module Middleman
         app.ready do
           # Doesn't make sense in build
           if environment != :build
-            @@reactor ||= Reactor.new(options, self)
+            if @@reactor
+              @@reactor.app = self
+            else
+              @@reactor = Reactor.new(options, self)
+            end
 
             files.changed do |file|
               sleep options[:grace_period]
@@ -28,11 +32,9 @@ module Middleman
                 file_url = sitemap.file_to_path(file)
                 file_resource = sitemap.find_resource_by_path(file_url)
                 reload_path = file_resource.destination_path
-              rescue StandardError => e
-                app.logger.error "== #{e.message}"
+              rescue
                 reload_path = "#{Dir.pwd}/#{file}"
               end
-
               @@reactor.reload_browser(reload_path)
             end
 
@@ -51,7 +53,6 @@ module Middleman
 
     class Reactor
       attr_reader :thread, :web_sockets, :app
-      delegate :logger, :to => :app
 
       def initialize(options, app)
         @app = app
@@ -60,25 +61,29 @@ module Middleman
         @thread      = start_threaded_reactor(options)
       end
 
+      def app= app
+        Thread.exclusive { @app = app }
+      end
+
+      def logger
+        Thread.exclusive { @app.logger }
+      end
+
       def stop
         thread.kill
       end
 
       def reload_browser(paths = [])
-        if @web_sockets.count > 0
-          paths = Array(paths)
-          logger.info "== LiveReloading path: #{paths.join(' ')}"
-          paths.each do |path|
-            data = MultiJson.encode(['refresh', {
-              :path           => path,
-              :apply_js_live  => @options[:apply_js_live],
-              :apply_css_live => @options[:apply_css_live]
-            }])
+        paths = Array(paths)
+        logger.info "== LiveReloading path: #{paths.join(' ')}"
+        paths.each do |path|
+          data = MultiJson.encode(['refresh', {
+            :path           => path,
+            :apply_js_live  => @options[:apply_js_live],
+            :apply_css_live => @options[:apply_css_live]
+          }])
 
-            @web_sockets.each { |ws| ws.send(data) }
-          end
-        else
-          logger.debug "== LiveReload @web_sockets is empty, nothing to do"
+          @web_sockets.each { |ws| ws.send(data) }
         end
       end
 
@@ -86,20 +91,12 @@ module Middleman
         Thread.new do
           EventMachine.run do
             logger.info "== LiveReload is waiting for a browser to connect"
-
-            EventMachine::WebSocket.run(:host => options[:host],
-                                        :port => options[:port],
-                                        :debug => false) do |ws|
-
-              ws.onopen do |handshake|
+            EventMachine.start_server(options[:host], options[:port], EventMachine::WebSocket::Connection, {}) do |ws|
+              ws.onopen do
                 begin
                   ws.send "!!ver:#{options[:api_version]}"
                   @web_sockets << ws
-                  logger.debug "== LiveReload browser connected #{{
-                    :path => handshake.path,
-                    :query => handshake.query,
-                    :origin => handshake.origin,
-                  }}"
+                  logger.debug "== LiveReload browser connected"
                 rescue
                   $stderr.puts $!
                   $stderr.puts $!.backtrace
@@ -107,11 +104,7 @@ module Middleman
               end
 
               ws.onmessage do |msg|
-                logger.debug "== LiveReload browser response: #{msg}"
-              end
-
-              ws.onerror do |e|
-                logger.debug "== LiveReload Error: #{e.message}"
+                logger.debug "LiveReload Browser URL: #{msg}"
               end
 
               ws.onclose do
