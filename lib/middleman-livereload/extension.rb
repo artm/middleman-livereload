@@ -5,6 +5,8 @@ require 'multi_json'
 module Middleman
   module LiveReload
     class << self
+      @@reactor = nil
+
       def registered(app, options={})
         options = {
           :api_version => '1.6',
